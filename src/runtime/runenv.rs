@@ -1,10 +1,18 @@
 use crate::runtime::runparams::{RunParams, parse_run_params};
 use std::env;
 use std::collections::HashMap;
+use std::ops::Deref;
 
 // RunEnv encapsulates the context for this test run.
 pub struct RunEnv {
     run_params: RunParams,
+}
+
+impl Deref for RunEnv {
+    type Target = RunParams;
+    fn deref(&self) -> Target {
+        &self.run_params
+    }
 }
 
 impl RunEnv {

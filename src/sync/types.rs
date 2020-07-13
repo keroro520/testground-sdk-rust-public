@@ -1,13 +1,6 @@
 use crossbeam_channel::{Receiver, bounded, Sender};
+use runtime::run_params::RunParams;
 use std::fmt;
-
-pub struct RunEnv {
-
-}
-
-pub struct RunParams {
-
-}
 
 #[derive(Debug, Clone)]
 pub(crate) struct State {

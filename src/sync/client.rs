@@ -3,6 +3,9 @@ use log::{info, error, debug};
 use crate::types::{RunEnv, State, Barrier};
 use crate::barrier::start_barrier_handler;
 use crossbeam_channel::{bounded, Sender};
+use crate::runtime::runenv::RunEnv;
+use crate::sync::types::Barrier;
+use crate::sync::barrier::start_barrier_handler;
 
 const REDIS_PAYLOAD_KEY: &str = "p";
 const ENV_REDIS_HOST: &str = "REDIS_HOST";
