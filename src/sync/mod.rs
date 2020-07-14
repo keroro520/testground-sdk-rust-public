@@ -4,3 +4,6 @@ pub mod client_sugar;
 pub mod subscription;
 pub mod topic;
 pub mod types;
+
+#[cfg(test)]
+mod tests;

@@ -9,7 +9,9 @@ use redis::{
 };
 use std::env;
 
-const REDIS_PAYLOAD_KEY: &str = "p";
+pub const ENV_REDIS_HOST: &str = "REDIS_HOST";
+pub const ENV_REDIS_PORT: &str = "REDIS_PORT";
+pub const REDIS_PAYLOAD_KEY: &str = "p";
 
 #[derive(Debug, Clone)]
 pub struct Client {
@@ -65,16 +67,16 @@ impl Client {
     }
 }
 
-fn new_redis_client() -> RedisResult<RedisClient> {
-    let host = env::var("REDIS_HOST").expect("env[REDIS_HOST]");
+pub(crate) fn new_redis_client() -> RedisResult<RedisClient> {
+    let host = env::var(ENV_REDIS_HOST).expect("env::var[REDIS_HOST]");
     let mut port = 6379;
-    if let Ok(port_str) = env::var("REDIS_PORT") {
+    if let Ok(port_str) = env::var(ENV_REDIS_PORT) {
         port = port_str.parse().expect("failed to parse REDIS_PORT");
     }
 
     debug!("trying redis host {} port {}", host, port);
 
-    let redis_client = RedisClient::open(format!("{}:{}", host, port))?;
+    let redis_client = RedisClient::open(format!("redis://{}:{}", host, port))?;
     let mut conn = redis_client.get_connection()?;
     if !conn.check_connection() {
         return Err(RedisError::from((
