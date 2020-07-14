@@ -65,37 +65,36 @@ pub struct RunParams {
 }
 
 impl RunParams {
-    pub fn new(kvs: &HashMap<String, String>) -> Self {
-        // TODO refactor via marco `get_kv!(kvs, name, default)`
-        RunParams {
-            test_plan: kvs.get(ENV_TEST_PLAN).cloned().unwrap(),
-            test_case: kvs.get(ENV_TEST_CASE).cloned().unwrap(),
-            test_run: kvs.get(ENV_TEST_RUN).cloned().unwrap(),
-            test_repo: kvs.get(ENV_TEST_REPO).cloned().unwrap_or_default(),
-            test_commit: kvs.get(ENV_TEST_COMMIT).cloned().unwrap_or_default(),
-            test_branch: kvs.get(ENV_TEST_BRANCH).cloned().unwrap_or_default(),
-            test_tag: kvs.get(ENV_TEST_TAG).cloned().unwrap_or_default(),
-            test_outputs_path: kvs.get(ENV_TEST_OUTPUTS_PATH).cloned().unwrap_or_default(),
-            test_instance_count: kvs
-                .get(ENV_TEST_INSTANCE_COUNT)
-                .and_then(|raw| raw.parse::<u64>().ok())
-                .unwrap(),
-            test_instance_role: kvs.get(ENV_TEST_INSTANCE_ROLE).cloned().unwrap_or_default(),
-            test_instance_params: kvs
-                .get(ENV_TEST_INSTANCE_PARAMS)
-                .map(unpack_params)
-                .unwrap_or_default(),
-            test_group_id: kvs.get(ENV_TEST_GROUP_ID).cloned().unwrap_or_default(),
-            test_group_instance_count: kvs
-                .get(ENV_TEST_GROUP_INSTANCE_COUNT)
-                .and_then(|raw| raw.parse::<u64>().ok())
-                .unwrap_or_default(),
-            test_sidecar: kvs
-                .get(ENV_TEST_SIDECAR)
+    pub fn new(kvs: &HashMap<String, String>) -> Result<Self, String> {
+        let get_or_ok = |key| {
+            kvs.get(key)
                 .cloned()
-                .and_then(|raw| raw.parse::<bool>().ok())
+                .ok_or_else(|| format!("envvar \"{}\" not exist", key))
+        };
+        Ok(RunParams {
+            test_plan: get_or_ok(ENV_TEST_PLAN)?,
+            test_case: get_or_ok(ENV_TEST_CASE)?,
+            test_run: get_or_ok(ENV_TEST_RUN)?,
+            test_repo: get_or_ok(ENV_TEST_REPO).unwrap_or_default(),
+            test_commit: get_or_ok(ENV_TEST_COMMIT).unwrap_or_default(),
+            test_branch: get_or_ok(ENV_TEST_BRANCH).unwrap_or_default(),
+            test_tag: get_or_ok(ENV_TEST_TAG).unwrap_or_default(),
+            test_outputs_path: get_or_ok(ENV_TEST_OUTPUTS_PATH).unwrap_or_default(),
+            test_instance_count: get_or_ok(ENV_TEST_INSTANCE_COUNT)?
+                .parse::<u64>()
+                .map_err(|err| err.to_string())?,
+            test_instance_role: get_or_ok(ENV_TEST_INSTANCE_ROLE).unwrap_or_default(),
+            test_instance_params: get_or_ok(ENV_TEST_INSTANCE_PARAMS)
+                .map(|raw| unpack_params(&raw))
                 .unwrap_or_default(),
-        }
+            test_group_id: get_or_ok(ENV_TEST_GROUP_ID).unwrap_or_default(),
+            test_group_instance_count: get_or_ok(ENV_TEST_GROUP_INSTANCE_COUNT)
+                .and_then(|raw| raw.parse::<u64>().map_err(|err| err.to_string()))
+                .unwrap_or_default(),
+            test_sidecar: get_or_ok(ENV_TEST_SIDECAR)
+                .and_then(|raw| raw.parse::<bool>().map_err(|err| err.to_string()))
+                .unwrap_or_default(),
+        })
     }
 
     // is_param_set checks if a certain parameter is set.

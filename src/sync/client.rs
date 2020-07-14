@@ -61,7 +61,7 @@ impl Client {
 
     // TODO FIXME
     fn extractor(&self, _runenv: &RunEnv) -> Result<RunParams, String> {
-        Ok(RunParams::new(&Default::default()))
+        Ok(RunParams::new(&Default::default()).unwrap())
     }
 }
 

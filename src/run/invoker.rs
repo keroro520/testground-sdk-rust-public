@@ -6,7 +6,7 @@ pub fn invoke<F>(f: F)
 where
     F: Fn(RunEnv) -> Result<(), String>,
 {
-    let run_env = current_run_env();
+    let run_env = current_run_env().expect("invoke current_run_env");
     match f(run_env) {
         Ok(()) => {
             // TODO
