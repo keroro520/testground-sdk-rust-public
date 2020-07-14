@@ -1,29 +1,18 @@
-use crossbeam_channel::{Receiver, bounded, Sender};
-use runtime::run_params::RunParams;
+use crate::runtime::runparams::RunParams;
+use crossbeam_channel::{bounded, Receiver, Sender};
 use std::fmt;
 
+/// State represents a state in a distributed state machine, identified by a
+/// unique string within the test case.
 #[derive(Debug, Clone)]
 pub(crate) struct State {
-    state: String,
-    redis_key: String,
+    runparams: RunParams,
+    name: String,
 }
 
-impl State {
-    pub(crate) fn new<S: ToString>(rp: &RunParams, state: S) -> Self {
-        let state = state.to_string();
-        let redis_key = format!("run:{}:plan:{}:case:{}:states:{}", rp.test_run, rp.test_plan, rp.test_case, state);
-        Self {state, redis_key}
-    }
-
-    pub(crate) fn state(&self) -> &str {
-        &self.state
-    }
-
-    pub(crate) fn redis_key(&self) -> &str {
-        &self.redis_key
-    }
-}
-
+/// Barrier represents a barrier over a State. A Barrier is a synchronisation
+/// checkpoint that will fire once the `target` number of entries on that state
+/// have been registered.
 pub struct Barrier {
     ch: Sender<Result<(), String>>,
 
@@ -31,9 +20,45 @@ pub struct Barrier {
     target: u64,
 }
 
+/// Topic represents a meeting place for test instances to exchange arbitrary
+/// data.
+pub struct Topic {
+    runparams: RunParams,
+    name: String,
+    typ: String, // TODO enum it
+}
+
+// Barrier represents a barrier over a State. A Barrier is a synchronisation
+// checkpoint that will fire once the `target` number of entries on that state
+// have been registered.
+impl State {
+    pub(crate) fn new<S: ToString>(runparams: RunParams, name: S) -> Self {
+        let name = name.to_string();
+        Self { runparams, name }
+    }
+
+    // The original state name
+    pub(crate) fn name(&self) -> &str {
+        &self.name
+    }
+
+    // The Redis key for this State, contextualized to a set of RunParams.
+    pub(crate) fn redis_key(&self) -> String {
+        let rp = &self.runparams;
+        format!(
+            "run:{}:plan:{}:case:{}:states:{}",
+            rp.test_run, rp.test_plan, rp.test_case, self.name
+        )
+    }
+}
+
 impl Barrier {
-    pub fn new<S: ToString>(rp: &RunParams, state: S, target: u64) -> (Self, Receiver<Result<(), String>>) {
-        let state = State::new(rp, state);
+    pub fn new<S: ToString>(
+        rp: &RunParams,
+        state: S,
+        target: u64,
+    ) -> (Self, Receiver<Result<(), String>>) {
+        let state = State::new(rp.clone(), state);
         let (sender, receiver) = bounded(1);
         let barrier = Self {
             ch: sender,
@@ -43,8 +68,8 @@ impl Barrier {
         (barrier, receiver)
     }
 
-    pub fn key(&self) -> &str {
-        &self.state.redis_key()
+    pub fn key(&self) -> String {
+        self.state.redis_key()
     }
 
     pub fn target(&self) -> u64 {
@@ -63,4 +88,31 @@ impl fmt::Debug for Barrier {
             .field(&self.target)
             .finish()
     }
+}
+
+impl Topic {
+    pub fn new<S: ToString>(runparams: RunParams, name: S, typ: S) -> Self {
+        Self {
+            runparams,
+            name: name.to_string(),
+            typ: typ.to_string(),
+        }
+    }
+
+    // Returns the key for this Topic, contextualized to a set of RunParams.
+    pub fn redis_key(&self) -> String {
+        let rp = &self.runparams;
+        format!(
+            "run:{}:plan:{}:case:{}:topics:{}",
+            rp.test_run, rp.test_plan, rp.test_case, self.name
+        )
+    }
+
+    // TODO validate_payload
+    fn validate_payload(&self) -> bool {
+        true
+    }
+
+    // TODO decode_payload
+    fn decode_payload(&self) {}
 }

@@ -1,9 +1,11 @@
-use log::{info, error};
 use crate::runtime::runenv::{current_run_env, RunEnv};
+use log::{error, info};
 
 // invoke runs the passed test-case and reports the result.
 pub fn invoke<F>(f: F)
-    where F: Fn(RunEnv) -> Result<(), String>{
+where
+    F: Fn(RunEnv) -> Result<(), String>,
+{
     let run_env = current_run_env();
     match f(run_env) {
         Ok(()) => {

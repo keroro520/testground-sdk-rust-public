@@ -1,6 +1,5 @@
 use crate::runtime::runenv::RunEnv;
 use crate::sync::client::Client as SyncClient;
-use log::warn;
 
 pub const STATE_NETWORK_INITIALIZED: &str = "network-initialized";
 
@@ -13,7 +12,7 @@ impl Client {
     // Returns a new network client. Use this client to request network
     // changes, such as setting latencies, jitter, packet loss, connectedness, etc.
     pub fn new(runenv: RunEnv, sync: SyncClient) -> Self {
-        Self {runenv, sync }
+        Self { runenv, sync }
     }
 
     // // Waits for the sidecar to initialize the network, if
@@ -52,5 +51,5 @@ impl Client {
     // pub fn must_configure_network(&self, config: &Config) {
     //     self.configure_network(config)
     //         .expect("must_configure_network")
-    }
+    // }
 }
