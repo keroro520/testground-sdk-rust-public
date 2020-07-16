@@ -1,12 +1,12 @@
 use crate::runtime::runparams::RunParams;
 use crossbeam_channel::{bounded, Receiver, Sender};
+use serde::{Deserialize,Serialize};
 use std::fmt;
 
 /// State represents a state in a distributed state machine, identified by a
 /// unique string within the test case.
 #[derive(Debug, Clone)]
-pub(crate) struct State {
-    runparams: RunParams,
+pub struct State {
     name: String,
 }
 
@@ -14,27 +14,46 @@ pub(crate) struct State {
 /// checkpoint that will fire once the `target` number of entries on that state
 /// have been registered.
 pub struct Barrier {
-    ch: Sender<Result<(), String>>,
+    response: Sender<Result<(), String>>,
 
     state: State,
+    redis_key: String,
     target: u64,
 }
 
 /// Topic represents a meeting place for test instances to exchange arbitrary
 /// data.
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Topic {
-    runparams: RunParams,
     name: String,
-    typ: String, // TODO enum it
+}
+
+// TODO The payload can be more general
+pub type Payload = u64;
+
+// Subscription represents a receive channel for data being published in a
+// Topic.
+pub struct Subscription {
+    response: Sender<Result<Payload, String>>,
+
+    topic: Topic,
+    redis_key: String,
+}
+
+impl ToString for State {
+    fn to_string(&self) -> String {
+        self.name.clone()
+    }
 }
 
 // Barrier represents a barrier over a State. A Barrier is a synchronisation
 // checkpoint that will fire once the `target` number of entries on that state
 // have been registered.
 impl State {
-    pub(crate) fn new<S: ToString>(runparams: RunParams, name: S) -> Self {
-        let name = name.to_string();
-        Self { runparams, name }
+    pub(crate) fn new<S: ToString>(name: S) -> Self {
+        Self {
+            name: name.to_string(),
+        }
     }
 
     // The original state name
@@ -43,8 +62,7 @@ impl State {
     }
 
     // The Redis key for this State, contextualized to a set of RunParams.
-    pub(crate) fn redis_key(&self) -> String {
-        let rp = &self.runparams;
+    pub(crate) fn redis_key(&self, rp: &RunParams) -> String {
         format!(
             "run:{}:plan:{}:case:{}:states:{}",
             rp.test_run, rp.test_plan, rp.test_case, self.name
@@ -58,26 +76,28 @@ impl Barrier {
         state: S,
         target: u64,
     ) -> (Self, Receiver<Result<(), String>>) {
-        let state = State::new(rp.clone(), state);
+        let state = State::new(state);
+        let redis_key = state.redis_key(rp);
         let (sender, receiver) = bounded(1);
         let barrier = Self {
-            ch: sender,
+            response: sender,
             state,
+            redis_key,
             target,
         };
         (barrier, receiver)
     }
 
     pub fn key(&self) -> String {
-        self.state.redis_key()
+        self.redis_key.clone() // TODO
     }
 
     pub fn target(&self) -> u64 {
         self.target
     }
 
-    pub fn ch(&self) -> &Sender<Result<(), String>> {
-        &self.ch
+    pub fn response(&self) -> &Sender<Result<(), String>> {
+        &self.response
     }
 }
 
@@ -91,28 +111,49 @@ impl fmt::Debug for Barrier {
 }
 
 impl Topic {
-    pub fn new<S: ToString>(runparams: RunParams, name: S, typ: S) -> Self {
-        Self {
-            runparams,
-            name: name.to_string(),
-            typ: typ.to_string(),
-        }
+    pub fn new<S: ToString>(name: S) -> Self {
+        Self { name: name.to_string(), }
     }
 
     // Returns the key for this Topic, contextualized to a set of RunParams.
-    pub fn redis_key(&self) -> String {
-        let rp = &self.runparams;
+    pub fn redis_key(&self, rp: &RunParams) -> String {
         format!(
             "run:{}:plan:{}:case:{}:topics:{}",
             rp.test_run, rp.test_plan, rp.test_case, self.name
         )
     }
 
-    // TODO validate_payload
-    fn validate_payload(&self) -> bool {
+    pub fn validate_payload(&self, _payload: Payload) -> bool {
         true
     }
 
-    // TODO decode_payload
-    fn decode_payload(&self) {}
+    pub fn decode_payload(&self) {}
+}
+
+impl Subscription {
+    pub fn new(topic: Topic, redis_key: String) -> (Self, Receiver<Result<Payload, String>>) {
+        let (sender, receiver) = bounded(1000);
+        (Self {
+            response: sender,
+            topic,
+            redis_key,
+        }, receiver)
+    }
+
+    pub fn response(&self) -> &Sender<Result<Payload, String>> {
+        &self.response
+    }
+
+    pub fn redis_key(&self) -> String {
+        self.redis_key.clone()
+    }
+}
+
+impl fmt::Debug for Subscription {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("Subscription")
+            .field(&self.topic)
+            .field(&self.redis_key)
+            .finish()
+    }
 }
