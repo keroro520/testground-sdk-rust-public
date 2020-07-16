@@ -22,6 +22,10 @@ impl RunEnv {
         Self { run_params }
     }
 
+    pub fn run_params(&self) -> &RunParams {
+        &self.run_params
+    }
+
     pub fn current() -> Result<Self, String> {
         let env: HashMap<String, String> = env::vars_os()
             .into_iter()
