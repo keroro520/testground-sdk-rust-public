@@ -1,13 +1,16 @@
 use crate::runtime::runenv::RunEnv;
 use crate::runtime::runparams::RunParams;
 use crate::sync::barrier::start_barrier_handler;
-use crate::sync::types::Barrier;
-use crossbeam_channel::{bounded, Sender};
+use crate::sync::types::{Barrier, State, Topic, Payload, Subscription};
+use crossbeam_channel::{bounded, Sender, Receiver};
 use log::{debug, warn};
 use redis::{
-    Client as RedisClient, ConnectionLike, ErrorKind as RedisErrorKind, RedisError, RedisResult,
+    Client as RedisClient, Commands, ConnectionLike, ErrorKind as RedisErrorKind, RedisError,
+    RedisResult,
 };
 use std::env;
+use std::thread::spawn;
+use crate::sync::subscription::start_subscription_handler;
 
 pub const ENV_REDIS_HOST: &str = "REDIS_HOST";
 pub const ENV_REDIS_PORT: &str = "REDIS_PORT";
@@ -15,22 +18,22 @@ pub const REDIS_PAYLOAD_KEY: &str = "p";
 
 #[derive(Debug, Clone)]
 pub struct Client {
-    runenv: RunEnv,
+    pub runenv: RunEnv, // TODO FIXME remove `pub`
     redis_client: RedisClient,
     barrier_sender: Sender<Barrier>,
+    subscription_sender: Sender<Subscription>,
 }
 
 impl Client {
     pub fn new(runenv: RunEnv) -> Result<Self, String> {
         let mut redis_client = new_redis_client().map_err(|err| err.to_string())?;
-
-        let (barrier_sender, barrier_receiver) = bounded(30);
-        start_barrier_handler(&mut redis_client, barrier_receiver);
-
+        let barrier_sender = start_barrier_handler(redis_client.clone());
+        let subscription_sender =  start_subscription_handler(redis_client.clone());
         Ok(Self {
             runenv,
             redis_client,
             barrier_sender,
+            subscription_sender,
         })
     }
 
@@ -39,7 +42,7 @@ impl Client {
     }
 
     pub fn barrier<S: ToString>(&self, state: S, target: u64) -> Result<(), String> {
-        let rp = self.extractor(&self.runenv)?;
+        let rp = self.runenv.run_params();
 
         // a barrier with target zero is satisfied immediately; log a warning as
         // this is probably programmer error.
@@ -61,14 +64,54 @@ impl Client {
         }
     }
 
-    // TODO FIXME
-    fn extractor(&self, _runenv: &RunEnv) -> Result<RunParams, String> {
-        Ok(RunParams::new(&Default::default()).unwrap())
+    // SignalEntry increments the state counter by one, returning the value of the
+    // new value of the counter, or an error if the operation fails.
+    pub fn signal_entry(&mut self, state: &State) -> Result<u64, String> {
+        let rp = self.runenv.run_params();
+
+        // Increment a counter on the state key
+        let key = state.redis_key(&rp);
+        let mut conn = self
+            .redis_client
+            .get_connection()
+            .map_err(|err| err.to_string())?;
+        conn.incr(key, 1).map_err(|err| err.to_string())
+    }
+
+    /// publish publishes an item on the supplied topic. The payload type must match
+    /// the payload type on the Topic; otherwise Publish will error.
+    pub fn publish(&mut self, topic: &Topic, payload: Payload) -> Result<u64, String> {
+        let rp = self.runenv.run_params();
+        let redis_key = topic.redis_key(rp);
+        if !topic.validate_payload(payload) {
+            return Err("invalid payload".to_string());
+        }
+
+        let mut conn = self.redis_client.get_connection().map_err(|err| err.to_string())?;
+        conn.publish(redis_key, payload).map_err(|err|err.to_string())
+    }
+
+
+    /// subscribe subscribes to a topic, consuming ordered, typed elements from
+    /// index 0, and sending them to channel ch.
+    ///
+    /// The supplied channel must be buffered, and its type must be a value or
+    /// pointer type matching the topic type. If these conditions are unmet, this
+    /// method will error immediately.
+    ///
+    /// The caller must consume from this channel promptly; failure to do so will
+    /// backpressure the DefaultClient's subscription event loop.
+    pub fn subscribe(&self, topic: Topic) -> Result<Receiver<Result<Payload, String>>, String> {
+        let rp = self.runenv.run_params();
+        let redis_key = topic.redis_key(rp);
+        let (subscription, sub_response_receiver) = Subscription::new(topic, redis_key);
+        self.subscription_sender.send(subscription).map_err(|err| err.to_string())?;
+        Ok(sub_response_receiver)
     }
 }
 
 pub(crate) fn new_redis_client() -> RedisResult<RedisClient> {
-    let host = env::var(ENV_REDIS_HOST).expect("env::var[REDIS_HOST]");
+    let host = env::var(ENV_REDIS_HOST).unwrap_or_else(|_| "localhost".to_string());
     let mut port = 6379;
     if let Ok(port_str) = env::var(ENV_REDIS_PORT) {
         port = port_str.parse().expect("failed to parse REDIS_PORT");
