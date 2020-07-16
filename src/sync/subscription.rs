@@ -1,8 +1,8 @@
+use crate::sync::types::Subscription;
 use crossbeam_channel::{bounded, select, Receiver, Sender};
-use log::{error, debug,warn};
+use log::{debug, error, warn};
 use redis::{Client as RedisClient, Commands, Connection};
 use std::collections::HashMap;
-use crate::sync::types::Subscription;
 use std::thread::spawn;
 use std::time::Duration;
 
@@ -16,7 +16,10 @@ pub(crate) fn start_subscription_handler(mut redis_client: RedisClient) -> Sende
     add_sub_sender
 }
 
-fn run_subscription_handler(mut redis_client: RedisClient, add_sub_receiver: Receiver<Subscription>) {
+fn run_subscription_handler(
+    mut redis_client: RedisClient,
+    add_sub_receiver: Receiver<Subscription>,
+) {
     let mut actives = HashMap::new();
 
     // let consumer = SubscriptionConsumer::new();
@@ -33,51 +36,55 @@ fn run_subscription_handler(mut redis_client: RedisClient, add_sub_receiver: Rec
 fn manage_subscriptions(
     redis_client: &mut RedisClient,
     actives: &mut HashMap<String, (Connection, Subscription)>,
-    add_sub_receiver: &Receiver<Subscription>) {
+    add_sub_receiver: &Receiver<Subscription>,
+) {
     loop {
-    select! {
-          recv(add_sub_receiver) -> msg => {
-            if let Ok(subscription) = msg {
-                let key = subscription.redis_key();
-                if actives.contains_key(&key) {
-                  if subscription.response().send(Err("failed to add duplicate subscription".to_string())).is_err() {
-                    debug!("duplicated subscription {:?}", subscription);
+        select! {
+            recv(add_sub_receiver) -> msg => {
+              if let Ok(subscription) = msg {
+                  let key = subscription.redis_key();
+                  if actives.contains_key(&key) {
+                    if subscription.response().send(Err("failed to add duplicate subscription".to_string())).is_err() {
+                      debug!("duplicated subscription {:?}", subscription);
+                    }
+                    continue
                   }
-                  continue
-                }
 
-                let mut conn = match redis_client.get_connection() {
-                    Ok(conn) => {
-                        conn
-                    }
-                    Err(err) => {
-                        warn!("failed to get connection; iteration skipped, error {:?}", err);
-                        return;
-                    }
-                };
+                  let mut conn = match redis_client.get_connection() {
+                      Ok(conn) => {
+                          conn
+                      }
+                      Err(err) => {
+                          warn!("failed to get connection; iteration skipped, error {:?}", err);
+                          return;
+                      }
+                  };
 
-                println!("SUBSCRIBE {}", key);
-                conn.set_read_timeout(Some(Duration::from_secs(2)));
-                let mut pubsub = conn.as_pubsub();
-                pubsub.subscribe(&key).expect(&format!("failed to subscribe topic \"{}\"", key));
-                loop {
+                  println!("SUBSCRIBE {}", key);
+                  conn.set_read_timeout(Some(Duration::from_secs(2)));
+                  let mut pubsub = conn.as_pubsub();
+                  pubsub.subscribe(&key).expect(&format!("failed to subscribe topic \"{}\"", key));
+                  loop {
 
-                    println!(
-                        "bilibili {:?}",
-                        pubsub.get_message(),
-                    );
-                }
-                actives.insert(key, (conn, subscription));
+                      println!(
+                          "bilibili {:?}",
+                          pubsub.get_message(),
+                      );
+                  }
+                  actives.insert(key, (conn, subscription));
+              }
             }
-          }
-          default => {
-            return;
-          }
-      }
+            default => {
+              return;
+            }
+        }
     }
 }
 
-fn consume_subscriptions(redis_client: &mut RedisClient, actives: &mut HashMap<String, (Connection, Subscription)>) {
+fn consume_subscriptions(
+    redis_client: &mut RedisClient,
+    actives: &mut HashMap<String, (Connection, Subscription)>,
+) {
     let mut removal = Vec::new();
     for (conn, subscription) in actives.values_mut().into_iter() {
         let mut pubsub = conn.as_pubsub();
@@ -85,10 +92,7 @@ fn consume_subscriptions(redis_client: &mut RedisClient, actives: &mut HashMap<S
         // TODO pubsub.get_message will block forever without timeout. The subscribe should be async
         pubsub.set_read_timeout(Some(Duration::from_secs(1)));
 
-        println!(
-            "bilibili subscription key: {}",
-            subscription.redis_key()
-        );
+        println!("bilibili subscription key: {}", subscription.redis_key());
         while let Ok(msg) = pubsub.get_message() {
             println!(
                 "bilibili 11111111111111111111111111111111111111111111111111111111: {}",

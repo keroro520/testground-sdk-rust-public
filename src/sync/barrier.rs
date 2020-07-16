@@ -1,17 +1,15 @@
 use crate::sync::types::Barrier;
-use crossbeam_channel::{never, select, tick, Receiver, bounded, Sender};
+use crossbeam_channel::{bounded, never, select, tick, Receiver, Sender};
 use log::{debug, warn};
 use redis::Client as RedisClient;
-use std::time::Duration;
 use std::thread::spawn;
+use std::time::Duration;
 
 const BARRIER_TICK_DURATION: Duration = Duration::from_secs(1);
 
 pub(crate) fn start_barrier_handler(mut redis_client: RedisClient) -> Sender<Barrier> {
     let (add_barrier_sender, add_barrier_receiver) = bounded(100);
-    spawn(move || {
-        run_barrier_handler(redis_client, add_barrier_receiver)
-    });
+    spawn(move || run_barrier_handler(redis_client, add_barrier_receiver));
     add_barrier_sender
 }
 

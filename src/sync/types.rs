@@ -1,6 +1,6 @@
 use crate::runtime::runparams::RunParams;
 use crossbeam_channel::{bounded, Receiver, Sender};
-use serde::{Deserialize,Serialize};
+use serde::{Deserialize, Serialize};
 use std::fmt;
 
 /// State represents a state in a distributed state machine, identified by a
@@ -112,7 +112,9 @@ impl fmt::Debug for Barrier {
 
 impl Topic {
     pub fn new<S: ToString>(name: S) -> Self {
-        Self { name: name.to_string(), }
+        Self {
+            name: name.to_string(),
+        }
     }
 
     // Returns the key for this Topic, contextualized to a set of RunParams.
@@ -133,11 +135,14 @@ impl Topic {
 impl Subscription {
     pub fn new(topic: Topic, redis_key: String) -> (Self, Receiver<Result<Payload, String>>) {
         let (sender, receiver) = bounded(1000);
-        (Self {
-            response: sender,
-            topic,
-            redis_key,
-        }, receiver)
+        (
+            Self {
+                response: sender,
+                topic,
+                redis_key,
+            },
+            receiver,
+        )
     }
 
     pub fn response(&self) -> &Sender<Result<Payload, String>> {

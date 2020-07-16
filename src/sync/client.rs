@@ -1,8 +1,9 @@
 use crate::runtime::runenv::RunEnv;
 use crate::runtime::runparams::RunParams;
 use crate::sync::barrier::start_barrier_handler;
-use crate::sync::types::{Barrier, State, Topic, Payload, Subscription};
-use crossbeam_channel::{bounded, Sender, Receiver};
+use crate::sync::subscription::start_subscription_handler;
+use crate::sync::types::{Barrier, Payload, State, Subscription, Topic};
+use crossbeam_channel::{bounded, Receiver, Sender};
 use log::{debug, warn};
 use redis::{
     Client as RedisClient, Commands, ConnectionLike, ErrorKind as RedisErrorKind, RedisError,
@@ -10,7 +11,6 @@ use redis::{
 };
 use std::env;
 use std::thread::spawn;
-use crate::sync::subscription::start_subscription_handler;
 
 pub const ENV_REDIS_HOST: &str = "REDIS_HOST";
 pub const ENV_REDIS_PORT: &str = "REDIS_PORT";
@@ -28,7 +28,7 @@ impl Client {
     pub fn new(runenv: RunEnv) -> Result<Self, String> {
         let mut redis_client = new_redis_client().map_err(|err| err.to_string())?;
         let barrier_sender = start_barrier_handler(redis_client.clone());
-        let subscription_sender =  start_subscription_handler(redis_client.clone());
+        let subscription_sender = start_subscription_handler(redis_client.clone());
         Ok(Self {
             runenv,
             redis_client,
@@ -87,10 +87,13 @@ impl Client {
             return Err("invalid payload".to_string());
         }
 
-        let mut conn = self.redis_client.get_connection().map_err(|err| err.to_string())?;
-        conn.publish(redis_key, payload).map_err(|err|err.to_string())
+        let mut conn = self
+            .redis_client
+            .get_connection()
+            .map_err(|err| err.to_string())?;
+        conn.publish(redis_key, payload)
+            .map_err(|err| err.to_string())
     }
-
 
     /// subscribe subscribes to a topic, consuming ordered, typed elements from
     /// index 0, and sending them to channel ch.
@@ -105,7 +108,9 @@ impl Client {
         let rp = self.runenv.run_params();
         let redis_key = topic.redis_key(rp);
         let (subscription, sub_response_receiver) = Subscription::new(topic, redis_key);
-        self.subscription_sender.send(subscription).map_err(|err| err.to_string())?;
+        self.subscription_sender
+            .send(subscription)
+            .map_err(|err| err.to_string())?;
         Ok(sub_response_receiver)
     }
 }

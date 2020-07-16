@@ -1,10 +1,10 @@
 use crate::runtime::test_utils::random_test_run_env;
 use crate::sync::client::Client;
-use crate::sync::types::{Topic, Payload};
+use crate::sync::types::{Payload, Topic};
 use crossbeam_channel::Receiver;
-use std::time::Duration;
 use redis::Commands;
-use std::thread::{spawn, sleep};
+use std::thread::{sleep, spawn};
+use std::time::Duration;
 
 #[test]
 fn test_subscribe_after_all_published() {
@@ -40,10 +40,20 @@ fn produce(client: &mut Client, topic: &Topic, payloads: &Vec<Payload>) {
     }
 }
 
-fn consume_ordered(sub_response_receiver: Receiver<Result<Payload, String>>, payloads: &Vec<Payload>) {
+fn consume_ordered(
+    sub_response_receiver: Receiver<Result<Payload, String>>,
+    payloads: &Vec<Payload>,
+) {
     for (i, payload) in payloads.iter().enumerate() {
-        let response = sub_response_receiver.recv_timeout(Duration::from_secs(5)).expect("subscription message").expect("ok");
+        let response = sub_response_receiver
+            .recv_timeout(Duration::from_secs(5))
+            .expect("subscription message")
+            .expect("ok");
         println!("response : {}", response);
-        assert_eq!(response, *payload, "expected value {}, got {} in position {}", payload, response, i);
+        assert_eq!(
+            response, *payload,
+            "expected value {}, got {} in position {}",
+            payload, response, i
+        );
     }
 }
