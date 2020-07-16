@@ -1,12 +1,21 @@
 use crate::sync::types::Barrier;
-use crossbeam_channel::{never, select, tick, Receiver};
+use crossbeam_channel::{never, select, tick, Receiver, bounded, Sender};
 use log::{debug, warn};
 use redis::Client as RedisClient;
 use std::time::Duration;
+use std::thread::spawn;
 
 const BARRIER_TICK_DURATION: Duration = Duration::from_secs(1);
 
-pub(crate) fn start_barrier_handler(redis_client: &mut RedisClient, receiver: Receiver<Barrier>) {
+pub(crate) fn start_barrier_handler(mut redis_client: RedisClient) -> Sender<Barrier> {
+    let (add_barrier_sender, add_barrier_receiver) = bounded(100);
+    spawn(move || {
+        run_barrier_handler(redis_client, add_barrier_receiver)
+    });
+    add_barrier_sender
+}
+
+fn run_barrier_handler(mut redis_client: RedisClient, receiver: Receiver<Barrier>) {
     let mut pending: Vec<Barrier> = Vec::new();
     let mut ticker = never();
     loop {
@@ -80,7 +89,7 @@ pub(crate) fn start_barrier_handler(redis_client: &mut RedisClient, receiver: Re
                     barrier.target(),
                     curr
                 );
-                if barrier.ch().send(Ok(())).is_err() {
+                if barrier.response().send(Ok(())).is_err() {
                     warn!(
                         "barrier waiter is already closed, key: {}, target: {}, curr: {}",
                         barrier.key(),
