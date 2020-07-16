@@ -38,6 +38,7 @@ pub struct Subscription {
 
     topic: Topic,
     redis_key: String,
+    last_id: String,
 }
 
 impl ToString for State {
@@ -140,6 +141,7 @@ impl Subscription {
                 response: sender,
                 topic,
                 redis_key,
+                last_id: "0".to_string(),
             },
             receiver,
         )
@@ -152,6 +154,14 @@ impl Subscription {
     pub fn redis_key(&self) -> String {
         self.redis_key.clone()
     }
+
+    pub fn last_id(&self) -> &str {
+        &self.last_id
+    }
+
+    pub fn set_last_id(&mut self, last_id: String) {
+        self.last_id = last_id
+    }
 }
 
 impl fmt::Debug for Subscription {
@@ -159,6 +169,7 @@ impl fmt::Debug for Subscription {
         f.debug_tuple("Subscription")
             .field(&self.topic)
             .field(&self.redis_key)
+            .field(&self.last_id)
             .finish()
     }
 }

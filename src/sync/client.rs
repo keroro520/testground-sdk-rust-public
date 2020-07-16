@@ -80,6 +80,13 @@ impl Client {
 
     /// publish publishes an item on the supplied topic. The payload type must match
     /// the payload type on the Topic; otherwise Publish will error.
+    ///
+    /// This method returns synchronously, once the item has been published
+    /// successfully, returning the sequence number of the new item in the ordered
+    /// topic, or an error if one ocurred, starting with 1 (for the first item).
+    ///
+    /// NOTE: testground implement pubsub mechanism based on redis stream but not pubsub.
+    /// Please reference https://github.com/testground/testground/pull/263 for more detail.
     pub fn publish(&mut self, topic: &Topic, payload: Payload) -> Result<u64, String> {
         let rp = self.runenv.run_params();
         let redis_key = topic.redis_key(rp);
@@ -91,7 +98,16 @@ impl Client {
             .redis_client
             .get_connection()
             .map_err(|err| err.to_string())?;
-        conn.publish(redis_key, payload)
+        redis::cmd("XADD")
+            .arg(&redis_key)
+            .arg("*")
+            .arg(REDIS_PAYLOAD_KEY)
+            .arg(payload)
+            .query(&mut conn)
+            .map_err(|err| err.to_string())?;
+        redis::cmd("XLEN")
+            .arg(&redis_key)
+            .query(&mut conn)
             .map_err(|err| err.to_string())
     }
 

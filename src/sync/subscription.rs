@@ -1,8 +1,9 @@
-use crate::sync::types::Subscription;
+use crate::sync::client::REDIS_PAYLOAD_KEY;
+use crate::sync::types::{Payload, Subscription};
 use crossbeam_channel::{bounded, select, Receiver, Sender};
-use log::{debug, error, warn};
-use redis::{Client as RedisClient, Commands, Connection};
-use std::collections::HashMap;
+use log::{debug, error, info, warn};
+use redis::{Client as RedisClient, Commands, Connection, FromRedisValue, Value};
+use std::collections::{HashMap, HashSet};
 use std::thread::spawn;
 use std::time::Duration;
 
@@ -24,18 +25,15 @@ fn run_subscription_handler(
 
     // let consumer = SubscriptionConsumer::new();
     loop {
-        manage_subscriptions(&mut redis_client, &mut actives, &add_sub_receiver);
+        manage_subscriptions(&mut actives, &add_sub_receiver);
         if !actives.is_empty() {
-            println!("bilibili 111");
             consume_subscriptions(&mut redis_client, &mut actives);
-            println!("bilibili 222");
         }
     }
 }
 
 fn manage_subscriptions(
-    redis_client: &mut RedisClient,
-    actives: &mut HashMap<String, (Connection, Subscription)>,
+    actives: &mut HashMap<String, Subscription>,
     add_sub_receiver: &Receiver<Subscription>,
 ) {
     loop {
@@ -50,28 +48,8 @@ fn manage_subscriptions(
                     continue
                   }
 
-                  let mut conn = match redis_client.get_connection() {
-                      Ok(conn) => {
-                          conn
-                      }
-                      Err(err) => {
-                          warn!("failed to get connection; iteration skipped, error {:?}", err);
-                          return;
-                      }
-                  };
-
-                  println!("SUBSCRIBE {}", key);
-                  conn.set_read_timeout(Some(Duration::from_secs(2)));
-                  let mut pubsub = conn.as_pubsub();
-                  pubsub.subscribe(&key).expect(&format!("failed to subscribe topic \"{}\"", key));
-                  loop {
-
-                      println!(
-                          "bilibili {:?}",
-                          pubsub.get_message(),
-                      );
-                  }
-                  actives.insert(key, (conn, subscription));
+                  info!("SUBSCRIBE {}", key);
+                  actives.insert(key, subscription);
               }
             }
             default => {
@@ -83,36 +61,60 @@ fn manage_subscriptions(
 
 fn consume_subscriptions(
     redis_client: &mut RedisClient,
-    actives: &mut HashMap<String, (Connection, Subscription)>,
+    actives: &mut HashMap<String, Subscription>,
 ) {
-    let mut removal = Vec::new();
-    for (conn, subscription) in actives.values_mut().into_iter() {
-        let mut pubsub = conn.as_pubsub();
-
-        // TODO pubsub.get_message will block forever without timeout. The subscribe should be async
-        pubsub.set_read_timeout(Some(Duration::from_secs(1)));
-
-        println!("bilibili subscription key: {}", subscription.redis_key());
-        while let Ok(msg) = pubsub.get_message() {
-            println!(
-                "bilibili 11111111111111111111111111111111111111111111111111111111: {}",
-                subscription.redis_key()
-            );
-            match msg.get_payload() {
-                Ok(payload) => {
-                    if subscription.response().send(Ok(payload)).is_err() {
-                        // we could not send value because context fired.
-                        // skip all further messages on this stream, and queue for
-                        // removal.
-                        removal.push(subscription.redis_key());
-                    }
-                }
-                Err(err) => error!("failed to decode subscription message: {:?}", msg),
-            }
-        }
+    let mut cmd = redis::cmd("XREAD");
+    cmd.arg("COUNT").arg(10); // max 10 elements per stream
+    cmd.arg("BLOCK").arg(0); // "BLOCK 0 `of 0 means to never timeout, block forever if no elements are available
+    cmd.arg("STREAMS");
+    for sub in actives.values() {
+        cmd.arg(sub.redis_key()).arg(sub.last_id());
     }
 
-    for key in removal.iter() {
-        actives.remove(key).expect("checked");
+    // Vec<Vec<channel, Vec<msg_id, HashMap<redis_payload_key, payload>>>>>
+    let res: Result<Vec<Vec<Value>>, _> = cmd.query(redis_client);
+    // let res: Result<Vec<(String, Vec<(String, Vec<(String, String)>)>)>,_> = cmd.query(redis_client);
+    // match cmd.query::<Vec<(String, Vec<(String, Vec<(String, String)>)>)>>(redis_client) {
+    match res {
+        Err(err) => {
+            error!("failed to XREAD: {:?}", err);
+            return;
+        }
+        Ok(streams) => {
+            let mut removals = HashSet::new();
+
+            for stream in streams {
+                let channel = String::from_redis_value(&stream[0]).expect("stream channel");
+                let msgs =
+                    Vec::<Vec<Value>>::from_redis_value(&stream[1]).expect("stream messages"); // stream[1];
+                let sub = actives.get_mut(&channel).expect("subscribing channel");
+                let mut peer_closed = false;
+
+                for msg in msgs {
+                    let msg_id = String::from_redis_value(&msg[0]).expect("message id");
+                    let entries = Vec::<(String, Payload)>::from_redis_value(&msg[1])
+                        .expect("message content");
+                    for (entry_id, payload) in entries {
+                        if &entry_id == REDIS_PAYLOAD_KEY {
+                            if sub.response().send(Ok(payload)).is_err() {
+                                // we could not send value because context fired.
+                                // skip all further messages on this stream, and queue for
+                                // removal.
+                                removals.insert(channel.clone());
+                                break;
+                            }
+                            sub.set_last_id(msg_id.clone());
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if !removals.is_empty() {
+                for channel in removals {
+                    actives.remove(&channel);
+                }
+            }
+        }
     }
 }

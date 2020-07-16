@@ -8,21 +8,13 @@ use std::time::Duration;
 
 #[test]
 fn test_subscribe_after_all_published() {
-    const iterations: u64 = 1000;
+    let iterations: u64 = 1000;
     let (runenv, _output_dir) = random_test_run_env();
     let mut client = Client::new(runenv).expect("new client");
     let payloads = (0..iterations).collect::<Vec<_>>();
     let topic = Topic::new("pandemic");
 
-    {
-        let mut client_clone = client.clone();
-        let topic_clone = topic.clone();
-        let payloads_clone = payloads.clone();
-
-        spawn(move || {
-            produce(&mut client_clone, &topic_clone, &payloads_clone);
-        });
-    }
+    produce(&mut client, &topic, &payloads);
 
     let sub_response_receiver = client.subscribe(topic).expect("subscribe");
     consume_ordered(sub_response_receiver, &payloads);
@@ -34,9 +26,8 @@ fn produce(client: &mut Client, topic: &Topic, payloads: &Vec<Payload>) {
     let mut conn = client.redis().get_connection().unwrap();
 
     for (i, payload) in payloads.iter().enumerate() {
-        let seq_id: u64 = conn.publish(redis_key.clone(), *payload).unwrap();
-        // TODO
-        // assert_eq!(seq_id, 1 + i as u64);
+        let seq_id: u64 = client.publish(topic, *payload).unwrap();
+        assert_eq!(seq_id, 1 + i as u64);
     }
 }
 
@@ -49,7 +40,6 @@ fn consume_ordered(
             .recv_timeout(Duration::from_secs(5))
             .expect("subscription message")
             .expect("ok");
-        println!("response : {}", response);
         assert_eq!(
             response, *payload,
             "expected value {}, got {} in position {}",
