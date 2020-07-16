@@ -71,18 +71,21 @@ fn consume_subscriptions(
         cmd.arg(sub.redis_key()).arg(sub.last_id());
     }
 
-    // Vec<Vec<channel, Vec<msg_id, HashMap<redis_payload_key, payload>>>>>
-    let res: Result<Vec<Vec<Value>>, _> = cmd.query(redis_client);
-    // let res: Result<Vec<(String, Vec<(String, Vec<(String, String)>)>)>,_> = cmd.query(redis_client);
-    // match cmd.query::<Vec<(String, Vec<(String, Vec<(String, String)>)>)>>(redis_client) {
+    let mut conn = redis_client.get_connection().unwrap();
+    conn.set_read_timeout(Some(Duration::from_secs(1)));
+
+    let res: Result<Vec<Vec<Value>>, _> = cmd.query(&mut conn);
     match res {
         Err(err) => {
             error!("failed to XREAD: {:?}", err);
             return;
         }
         Ok(streams) => {
-            let mut removals = HashSet::new();
+            if streams.is_empty() {
+                return;
+            }
 
+            let mut removals = HashSet::new();
             for stream in streams {
                 let channel = String::from_redis_value(&stream[0]).expect("stream channel");
                 let msgs =
