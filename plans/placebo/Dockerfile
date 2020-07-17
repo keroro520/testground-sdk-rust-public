@@ -9,7 +9,7 @@ COPY . .
 # "/build" is workdir.
 # "/build/plan" is our source directory which has been specified
 # in [testground daemon](https://github.com/testground/testground/blob/a4a1a83b56db92983e7b2a851751c59a00a4cbb1/pkg/daemon/build.go#L108)
-RUN cd plan && cargo build --release # && cp target/release/placebo /testplan
+RUN cd plan && cargo build --release --target-dir ../target && cp ../target/release/placebo /testplan
 
 # === RUNNER IMAGE === #
 

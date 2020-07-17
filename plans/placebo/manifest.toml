@@ -8,7 +8,7 @@ runner = "local:docker"
 enabled = true
 
 [builders."docker:generic".build_args]
-build_image = "rust:alpine"
+build_image = "rust:slim"
 run_image = "scratch"
 
 [builders."docker:go"]
