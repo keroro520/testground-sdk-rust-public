@@ -7,4 +7,4 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-testground = { path = "../../../testground-sdk-rust" }
+testground = { git = "https://github.com/keroro520/testground-sdk-rust-public", branch = "inital-sync" }
