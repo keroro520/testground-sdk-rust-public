@@ -1,14 +1,21 @@
 name = "placebo"
 
 [defaults]
-builder = "exec:go"
-runner = "local:exec"
+builder = "docker:generic"
+runner = "local:docker"
+
+[builders."docker:generic"]
+enabled = true
+
+[builders."docker:generic".build_args]
+build_image = "rust:alpine"
+run_image = "scratch"
 
 [builders."docker:go"]
-enabled = true
+enabled = false
 
 [builders."exec:go"]
-enabled = true
+enabled = false
 
 [runners."local:docker"]
 enabled = true
