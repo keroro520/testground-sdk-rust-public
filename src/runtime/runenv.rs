@@ -1,13 +1,18 @@
+use crate::runtime::runenv_logger::init_logger;
 use crate::runtime::runparams::RunParams;
 use serde::{Deserialize, Serialize};
+use slog::Logger;
 use std::collections::HashMap;
 use std::env;
+use std::fmt;
 use std::ops::Deref;
 
 /// RunEnv encapsulates the context for this test run.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone)]
 pub struct RunEnv {
     run_params: RunParams,
+
+    logger: Logger,
 }
 
 impl Deref for RunEnv {
@@ -17,13 +22,24 @@ impl Deref for RunEnv {
     }
 }
 
+impl fmt::Debug for RunEnv {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("RunEnv").field(&self.run_params).finish()
+    }
+}
+
 impl RunEnv {
     pub fn new(run_params: RunParams) -> Self {
-        Self { run_params }
+        let logger = init_logger(&run_params);
+        Self { run_params, logger }
     }
 
     pub fn run_params(&self) -> &RunParams {
         &self.run_params
+    }
+
+    pub fn l(&self) -> &Logger {
+        &self.logger
     }
 
     pub fn current() -> Result<Self, String> {

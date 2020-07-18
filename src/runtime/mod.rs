@@ -1,4 +1,5 @@
 pub mod runenv;
+pub mod runenv_logger;
 pub mod runparams;
 
 #[cfg(test)]
