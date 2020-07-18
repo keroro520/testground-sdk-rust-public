@@ -1,18 +1,19 @@
-use crate::runtime::runenv_logger::init_logger;
+use crate::runtime::runenv_logger::{Event, Logger};
 use crate::runtime::runparams::RunParams;
 use serde::{Deserialize, Serialize};
-use slog::Logger;
+use std::cell::Ref;
 use std::collections::HashMap;
 use std::env;
 use std::fmt;
 use std::ops::Deref;
+use std::sync::{Arc, Mutex};
 
 /// RunEnv encapsulates the context for this test run.
 #[derive(Clone)]
 pub struct RunEnv {
     run_params: RunParams,
 
-    logger: Logger,
+    logger: Arc<Mutex<Logger>>,
 }
 
 impl Deref for RunEnv {
@@ -30,7 +31,7 @@ impl fmt::Debug for RunEnv {
 
 impl RunEnv {
     pub fn new(run_params: RunParams) -> Self {
-        let logger = init_logger(&run_params);
+        let logger = Arc::new(Mutex::new(Logger::init(&run_params)));
         Self { run_params, logger }
     }
 
@@ -38,8 +39,10 @@ impl RunEnv {
         &self.run_params
     }
 
-    pub fn l(&self) -> &Logger {
-        &self.logger
+    pub fn log(&self, msg: &str, event: Event) {
+        if let Ok(mut logger) = self.logger.lock() {
+            logger.log(self.run_params(), msg, event)
+        }
     }
 
     pub fn current() -> Result<Self, String> {

@@ -17,7 +17,7 @@ pub const ENV_TEST_GROUP_INSTANCE_COUNT: &str = "TEST_GROUP_INSTANCE_COUNT";
 pub const ENV_TEST_SIDECAR: &str = "TEST_SIDECAR";
 
 // RunParams encapsulates the runtime parameters for this test.
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Default, Debug, Serialize, Deserialize, Clone)]
 pub struct RunParams {
     #[serde(rename = "plan")]
     pub test_plan: String,
