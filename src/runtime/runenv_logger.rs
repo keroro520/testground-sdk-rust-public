@@ -14,25 +14,22 @@ use serde::{Deserialize, Serialize};
 use std::io::Write;
 use std::thread::{spawn, JoinHandle};
 
-#[derive(Copy, Clone, Debug, Deserialize, Serialize)]
-pub enum EventType {
-    EventTypeStart,
-    EventTypeMessage,
-    EventTypeFinish,
-}
+pub type EventType = str;
+pub type EventOutcome = str;
 
-#[derive(Copy, Clone, Debug, Deserialize, Serialize)]
-pub enum EventOutcome {
-    EventOutcomeOK,
-    EventOutcomeFailed,
-    EventOutcomeCrashed,
-}
+pub const EVENT_TYPE_START: &EventType = "start";
+pub const EVENT_TYPE_FINISH: &EventType = "finish";
+pub const EVENT_TYPE_MESSAGE: &EventType = "message";
+
+pub const EVENT_OUTCOME_OK: &EventOutcome = "ok";
+pub const EVENT_OUTCOME_FAILED: &EventOutcome = "failed";
+pub const EVENT_OUTCOME_CRASHED: &EventOutcome = "crashed";
 
 #[derive(Debug, Default, Deserialize, Serialize, Clone)]
 pub struct Event {
     #[serde(rename = "type")]
-    pub type_: EventType,
-    pub outcome: EventOutcome,
+    pub type_: String,
+    pub outcome: String,
     pub error: String,
     pub stacktrace: String,
     pub message: String,
@@ -43,9 +40,9 @@ pub struct Logger {
 }
 
 impl Event {
-    pub fn new(type_: EventType) -> Self {
+    pub fn new(type_: &EventType) -> Self {
         Self {
-            type_,
+            type_: type_.to_string(),
             ..Default::default()
         }
     }
@@ -74,7 +71,8 @@ impl Logger {
     pub fn log(&mut self, rp: &RunParams, msg: &str, event: Event) {
         // Example {"ts":1595070350599936400,"msg":"","group_id":"single","run_id":"25cf14535bc5","event":{"type":"message","message":"io closed"}}
         let log = json!({
-            "ts": 111,
+            // TODO event ts
+            "ts": 1595070350599936400u64,
             "msg": msg,
             "group_id": rp.test_group_id,
             "run_id": rp.test_run,
@@ -84,37 +82,5 @@ impl Logger {
         if self.file.write(str.as_bytes()).is_ok() {
             println!("{}", str);
         }
-    }
-}
-
-impl fmt::Display for EventType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            EventType::EventTypeStart => write!(f, "start"),
-            EventType::EventTypeMessage => write!(f, "message"),
-            EventType::EventTypeFinish => write!(f, "finish"),
-        }
-    }
-}
-
-impl fmt::Display for EventOutcome {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            EventOutcome::EventOutcomeOK => write!(f, "ok"),
-            EventOutcome::EventOutcomeFailed => write!(f, "failed"),
-            EventOutcome::EventOutcomeCrashed => write!(f, "crashed"),
-        }
-    }
-}
-
-impl Default for EventType {
-    fn default() -> Self {
-        EventType::EventTypeMessage
-    }
-}
-
-impl Default for EventOutcome {
-    fn default() -> Self {
-        EventOutcome::EventOutcomeOK
     }
 }
