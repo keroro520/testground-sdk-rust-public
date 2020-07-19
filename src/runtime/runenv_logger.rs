@@ -8,44 +8,15 @@ use std::path::Path;
 use std::str::FromStr;
 use std::sync::Mutex;
 
+use crate::runtime::runenv_event::Event;
 use crossbeam_channel::{bounded, Sender};
 use log::{Level, Metadata, Record};
 use serde::{Deserialize, Serialize};
 use std::io::Write;
 use std::thread::{spawn, JoinHandle};
 
-pub type EventType = str;
-pub type EventOutcome = str;
-
-pub const EVENT_TYPE_START: &EventType = "start";
-pub const EVENT_TYPE_FINISH: &EventType = "finish";
-pub const EVENT_TYPE_MESSAGE: &EventType = "message";
-
-pub const EVENT_OUTCOME_OK: &EventOutcome = "ok";
-pub const EVENT_OUTCOME_FAILED: &EventOutcome = "failed";
-pub const EVENT_OUTCOME_CRASHED: &EventOutcome = "crashed";
-
-#[derive(Debug, Default, Deserialize, Serialize, Clone)]
-pub struct Event {
-    #[serde(rename = "type")]
-    pub type_: String,
-    pub outcome: String,
-    pub error: String,
-    pub stacktrace: String,
-    pub message: String,
-}
-
 pub struct Logger {
     file: File,
-}
-
-impl Event {
-    pub fn new(type_: &EventType) -> Self {
-        Self {
-            type_: type_.to_string(),
-            ..Default::default()
-        }
-    }
 }
 
 impl Drop for Logger {

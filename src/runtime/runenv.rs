@@ -1,4 +1,5 @@
-use crate::runtime::runenv_logger::{Event, Logger};
+use crate::runtime::runenv_event::Event;
+use crate::runtime::runenv_logger::Logger;
 use crate::runtime::runparams::RunParams;
 use serde::{Deserialize, Serialize};
 use std::cell::Ref;
