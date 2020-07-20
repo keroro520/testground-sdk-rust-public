@@ -35,13 +35,13 @@ impl Event {
 
 impl RunEnv {
     // record_message records an informational message.
-    pub fn record_message(&self, msg: &str, message: &str) {
+    pub fn record_message(&self, message: &str) {
         let event = Event {
             type_: EVENT_TYPE_MESSAGE.to_string(),
             message: message.to_string(),
             ..Default::default()
         };
-        self.log(msg, event)
+        self.log("", event)
     }
 
     pub fn record_start(&self) {

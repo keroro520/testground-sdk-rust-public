@@ -7,18 +7,20 @@ pub fn invoke<F>(f: F)
 where
     F: Fn(RunEnv) -> Result<(), String>,
 {
-    let run_env = current_run_env().expect("invoke current_run_env");
+    wait_network_initialize();
+
+    let run_env = current_run_env().expect("current_run_env");
     run_env.record_start();
-    run_env.record_success();
 
-    ::std::thread::sleep(::std::time::Duration::from_secs(6));
+    match f(run_env.clone()) {
+        Ok(()) => run_env.record_success(),
+        Err(err) => run_env.record_failure(&err),
+    }
 
-    // match f(run_env) {
-    //     Ok(()) => {
-    //         // TODO
-    //     }
-    //     Err(err) => {
-    //         // TODO
-    //     }
-    // }
+    run_env.record_message("io closed");
+}
+
+// TODO  wait_network_initialize
+fn wait_network_initialize() {
+    ::std::thread::sleep(::std::time::Duration::from_secs(3));
 }
