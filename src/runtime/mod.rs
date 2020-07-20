@@ -1,4 +1,5 @@
 pub mod runenv;
+pub mod runenv_assets;
 pub mod runenv_event;
 pub mod runenv_logger;
 pub mod runparams;
